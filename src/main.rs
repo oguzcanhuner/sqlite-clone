@@ -11,25 +11,7 @@ fn main() {
         Err(e) => panic!("Failed to open file: {}", e),
     };
 
-    let mut header = [0u8; 100];
-
-    // &mut means "give read_exact temporary permission to mutate header without
-    // becoming the owner". Once read_exact is done with it, the header gets back ownership.
-    //
-    // - header — pass ownership (you can't use it after)
-    // - &header — immutable borrow (you still own it, they can only read)
-    // - &mut header — mutable borrow (you still own it, they can read/write)
-    //
-    // read_exact mutates header in place so there's no need to reassign it
-    match file.read_exact(&mut header) {
-        Ok(buffer) => buffer,
-        Err(e) => panic!("{}", e),
-    }
-
-    let page_size = u16::from_be_bytes([header[16], header[17]]);
-
-    println!("Magic string: {}", from_utf8(&header[0..16]).unwrap());
-    println!("Page size: {}", &page_size);
+    let header = parse_header(&mut file);
 
     // At byte 100, you'll find a b-tree page header:
     // | Offset | Size | Description |
@@ -48,7 +30,7 @@ fn main() {
     // reading the remainder of page 1 (starting from offset 100)
     // page1 needs to be a vector because page_size is not known at compile time,
     // so it needs to be variable length (which vector is)
-    let mut page1 = vec![0u8; page_size as usize - 100];
+    let mut page1 = vec![0u8; header.page_size as usize - 100];
 
     // add the bytes to the page1 vector
     match file.read_exact(&mut page1) {
@@ -87,4 +69,33 @@ fn main() {
 
     let rightmost = u32::from_be_bytes([page1[8], page1[9], page1[10], page1[11]]);
     println!("Right-most child: page {}", rightmost);
+}
+
+// for now, all we care about is page_size
+struct Header {
+    page_size: u16,
+}
+
+fn parse_header(file: &mut File) -> Header {
+    let mut header = [0u8; 100];
+
+    // &mut means "give read_exact temporary permission to mutate header without
+    // becoming the owner". Once read_exact is done with it, the header gets back ownership.
+    //
+    // - header — pass ownership (you can't use it after)
+    // - &header — immutable borrow (you still own it, they can only read)
+    // - &mut header — mutable borrow (you still own it, they can read/write)
+    //
+    // read_exact mutates header in place so there's no need to reassign it
+    match file.read_exact(&mut header) {
+        Ok(buffer) => buffer,
+        Err(e) => panic!("{}", e),
+    }
+
+    let page_size = u16::from_be_bytes([header[16], header[17]]);
+
+    println!("Magic string: {}", from_utf8(&header[0..16]).unwrap());
+    println!("Page size: {}", page_size);
+
+    Header { page_size }
 }
