@@ -1,4 +1,5 @@
 use std::{fs::File, io::Read, str::from_utf8};
+mod interior;
 
 // read from chinook.db
 // the first 100 bytes are reserved for the header
@@ -44,7 +45,7 @@ fn main() {
 
     // we iterate over each cell to get its page number and rowid
     for i in 0..num_of_cells {
-        let cell = get_cell(i, &page1);
+        let cell = interior::get_cell(i, &page1);
 
         println!("Cell: {}", i);
         println!("Child page number: {}", cell.child_page_number);
@@ -53,34 +54,6 @@ fn main() {
 
     let rightmost = u32::from_be_bytes([page1[8], page1[9], page1[10], page1[11]]);
     println!("Right-most child: page {}", rightmost);
-}
-
-struct Cell {
-    child_page_number: u32,
-    rowid: u8,
-}
-
-fn get_cell(i: u16, page: &[u8]) -> Cell {
-    // each pointer is u16 (2 bytes) but is cast to usize because rust expects
-    // array indexes to be usize
-    let pointer_index = 12 + (i * 2) as usize;
-    let cell_offset =
-        u16::from_be_bytes([page[pointer_index], page[pointer_index + 1]]) as usize - 100;
-
-    // the child page number is a u32 (4 bytes)
-    let child_page = u32::from_be_bytes([
-        page[cell_offset],
-        page[cell_offset + 1],
-        page[cell_offset + 2],
-        page[cell_offset + 3],
-    ]);
-
-    let rowid_byte = page[cell_offset + 4];
-
-    Cell {
-        child_page_number: child_page,
-        rowid: rowid_byte,
-    }
 }
 
 // for now, all we care about is page_size
