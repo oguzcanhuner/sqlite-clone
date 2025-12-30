@@ -1,4 +1,5 @@
-use std::{fs::File, io::Read, str::from_utf8};
+use std::{fs::File, io::Read};
+
 mod database;
 mod interior;
 
@@ -11,7 +12,7 @@ fn main() {
         Err(e) => panic!("Failed to open file: {}", e),
     };
 
-    let header = parse_header(&mut file);
+    let header = database::parse_header(&mut file);
 
     // At byte 100, you'll find a b-tree page header:
     // | Offset | Size | Description |
@@ -55,35 +56,4 @@ fn main() {
 
     let rightmost = u32::from_be_bytes([page1[8], page1[9], page1[10], page1[11]]);
     println!("Right-most child: page {}", rightmost);
-}
-
-// for now, all we care about is page_size
-struct Header {
-    page_size: u16,
-}
-
-// offset 0-16 = magic string "SQLite format 3/000"
-// offfset 16-18 = page size in bytes
-fn parse_header(file: &mut File) -> Header {
-    let mut header = [0u8; 100];
-
-    // &mut means "give read_exact temporary permission to mutate header without
-    // becoming the owner". Once read_exact is done with it, the header gets back ownership.
-    //
-    // - header — pass ownership (you can't use it after)
-    // - &header — immutable borrow (you still own it, they can only read)
-    // - &mut header — mutable borrow (you still own it, they can read/write)
-    //
-    // read_exact mutates header in place so there's no need to reassign it
-    match file.read_exact(&mut header) {
-        Ok(buffer) => buffer,
-        Err(e) => panic!("{}", e),
-    }
-
-    let page_size = u16::from_be_bytes([header[16], header[17]]);
-
-    println!("Magic string: {}", from_utf8(&header[0..16]).unwrap());
-    println!("Page size: {}", page_size);
-
-    Header { page_size }
 }
