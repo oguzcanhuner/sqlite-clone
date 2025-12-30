@@ -1,4 +1,5 @@
 use std::{fs::File, io::Read, str::from_utf8};
+mod database;
 mod interior;
 
 // read from chinook.db

@@ -10,7 +10,7 @@ A minimal SQLite implementation for learning purposes.
 - [x] Parse b-tree page headers
 - [x] Parse interior page cells
 - [ ] Parse leaf page cells
-- [ ] Decode varints
+- [x] Decode varints
 - [ ] Decode record format (column types + values)
 - [ ] Read `sqlite_master` to find tables
 - [ ] Traverse table b-trees to read rows
