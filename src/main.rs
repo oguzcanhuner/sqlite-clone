@@ -20,29 +20,45 @@ fn main() {
 
     println!("Page size: {}", header.page_size);
 
-    let page1 = Page::read(&mut file, 47, header.page_size);
+    traverse(&mut file, 1, header.page_size);
+}
 
-    println!("Number of cells: {}", page1.num_cells);
+// follow the cell references in interior pages and fetch values from
+// linked leaf pages
+fn traverse(file: &mut File, page_num: u32, page_size: u16) {
+    let page = Page::read(file, page_num, page_size);
 
-    // we iterate over each cell to get its page number and rowid
-    for i in 0..page1.num_cells {
-        println!("Cell pointer for {}: {}", i, page1.cell_pointer(i));
+    if page.is_leaf() {
+        for i in 0..page.num_cells {
+            let cell = leaf::parse_cell(page.cell_pointer(i), &page.data);
 
-        if page1.is_leaf() {
-            println!("Leaf cell: {}", i);
-            let cell = leaf::parse_cell(page1.cell_pointer(i), &page1.data);
-            println!("Values: {:?}", cell.values);
-        } else {
-            let cell = interior::parse_cell(page1.cell_pointer(i), &page1.data);
-            println!("Interior cell: {}", i);
-            println!("Rowid (first byte): {}", cell.rowid);
-            println!("Child page number: {}", cell.child_page_number);
+            // this is only relevant to the sqlite_master table on page 1
+            if cell.values[0].as_text() == Some("table") {
+                println!(
+                    "name: {:?}, root_page: {:?}",
+                    cell.values[1].as_text().unwrap(),
+                    cell.values[3].as_integer().unwrap()
+                );
+            }
         }
-    }
+    } else {
+        for i in 0..page.num_cells {
+            let cell = interior::parse_cell(page.cell_pointer(i), &page.data);
+            traverse(file, cell.child_page_number, page_size);
+        }
 
-    if !page1.is_leaf() {
-        let rightmost =
-            u32::from_be_bytes([page1.data[8], page1.data[9], page1.data[10], page1.data[11]]);
-        println!("Right-most child: page {}", rightmost);
+        let mut offset = 0;
+
+        if page_num == 1 {
+            offset = 100;
+        }
+
+        let rightmost = u32::from_be_bytes([
+            page.data[offset + 8],
+            page.data[offset + 9],
+            page.data[offset + 10],
+            page.data[offset + 11],
+        ]);
+        traverse(file, rightmost, page_size);
     }
 }

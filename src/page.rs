@@ -26,7 +26,7 @@ impl Page {
         let mut page = vec![0u8; page_size as usize];
 
         // go back to the start of the page
-        let offset = page_num as u64 * page_size as u64;
+        let offset = (page_num - 1) as u64 * page_size as u64;
         file.seek(SeekFrom::Start(offset)).unwrap();
 
         // read only the bytes of the page
@@ -39,11 +39,9 @@ impl Page {
 
         // adjust for the 100 byte header on the first page.
         // b-tree header starts after that.
-        if page_num == 0 {
+        if page_num == 1 {
             offset = 100
         }
-
-
 
         let num_cells = u16::from_be_bytes([page[offset + 3], page[offset + 4]]);
         let page_type = page[offset];
