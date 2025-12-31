@@ -2,6 +2,7 @@ use std::{fs::File, io::Read};
 
 mod database;
 mod interior;
+mod leaf;
 
 // read from chinook.db
 // the first 100 bytes are reserved for the header
@@ -47,7 +48,7 @@ fn main() {
 
     // we iterate over each cell to get its page number and rowid
     for i in 0..num_of_cells {
-        let cell = interior::get_cell(i, &page1);
+        let cell = interior::parse_cell(i, &page1);
 
         println!("Cell: {}", i);
         println!("Child page number: {}", cell.child_page_number);

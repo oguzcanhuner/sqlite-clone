@@ -8,7 +8,7 @@ pub struct Cell {
     pub rowid: u64,
 }
 
-pub fn get_cell(i: u16, page: &[u8]) -> Cell {
+pub fn parse_cell(i: u16, page: &[u8]) -> Cell {
     // each pointer is u16 (2 bytes) but is cast to usize because rust expects
     // array indexes to be usize
     let pointer_index = BTREE_HEADER_SIZE + (i * 2) as usize;
@@ -36,7 +36,7 @@ pub fn get_cell(i: u16, page: &[u8]) -> Cell {
 }
 
 #[test]
-fn test_get_cell() {
+fn test_parse_cell() {
     // Build a fake page (starting at offset 100, so no db header). Fill it with 0s (0u8)
     let mut fake_page = vec![0u8; 1024 - HEADER_SIZE];
     // cell pointer is at index 12-13. anything before is the header.
@@ -67,7 +67,7 @@ fn test_get_cell() {
         rowid: 300,
     };
 
-    let result = get_cell(0, &fake_page);
+    let result = parse_cell(0, &fake_page);
 
     assert_eq!(result.child_page_number, target_cell.child_page_number);
     assert_eq!(result.rowid, target_cell.rowid);
