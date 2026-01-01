@@ -1,3 +1,32 @@
+use crate::varint::parse_varint;
+use crate::value::{parse_type_code, Value};
+
+pub struct Cell {
+    pub child_page_number: u32,
+    pub rowid: u64,
+}
+
+pub fn parse_interior_cell(index: usize, page: &[u8]) -> Cell {
+    // the child page number is a u32 (4 bytes)
+    let child_page = u32::from_be_bytes([
+        page[index],
+        page[index + 1],
+        page[index + 2],
+        page[index + 3],
+    ]);
+
+    // rowid is a varint (which means we don't know how many bytes the value takes up)
+    // it can be up to 9 bytes. the parse_varint function takes all bytes from the current
+    // offset (i.e. after we've read the 4 bytes which contains the child page number) up to
+    // the end of the buffer (hence [cell_offset + 4..]).
+    let (rowid, _bytes_read) = parse_varint(&page[index + 4..]);
+
+    Cell {
+        child_page_number: child_page,
+        rowid,
+    }
+}
+
 // the leaf page contains a header just like the first iterior page
 // the structure is the same:
 //
@@ -20,22 +49,6 @@
 // - Type codes — One varint per column, tells you the type and size
 // - Values — The actual column data, packed together
 //
-// The type code tells you what kind of data and how big:
-// | Code | Meaning |
-// |------|---------|
-// | 0 | NULL (0 bytes) |
-// | 1 | 8-bit integer (1 byte) |
-// | 2 | 16-bit integer (2 bytes) |
-// | 3 | 24-bit integer (3 bytes) |
-// | 4 | 32-bit integer (4 bytes) |
-// | 5 | 48-bit integer (6 bytes) |
-// | 6 | 64-bit integer (8 bytes) |
-// | 7 | float (8 bytes) |
-// | 8 | literal 0 (0 bytes) |
-// | 9 | literal 1 (0 bytes) |
-// | ≥12, even | BLOB, size = (code-12)/2 |
-// | ≥13, odd | TEXT, size = (code-13)/2 |
-//
 // Example
 // A row (id=5, name="Alice"):
 // Payload:
@@ -54,34 +67,6 @@
 // Values:
 //   0x05            → column 1 value: 5
 //   "Alice"         → column 2 value: Alice
-//
-//
-
-use crate::database::parse_varint;
-
-#[derive(PartialEq, Debug)]
-pub enum Value {
-    Null,
-    Integer(i64),
-    Float(f64),
-    Text(String),
-    Blob(Vec<u8>),
-}
-
-impl Value {
-    pub fn as_text(&self) -> Option<&str> {
-        match self {
-            Value::Text(s) => Some(s),
-            _ => None,
-        }
-    }
-    pub fn as_integer(&self) -> Option<i64> {
-        match self {
-            Value::Integer(i) => Some(*i),
-            _ => None,
-        }
-    }
-}
 
 #[derive(Debug)]
 pub struct Row {
@@ -93,7 +78,7 @@ pub struct Row {
 // The header also contains number_of_cells
 // Each index is a 2-byte pointer, so you need to fetch the two bytes and cast them
 // together using big-endian.
-pub fn parse_cell(pointer: usize, page: &[u8]) -> Row {
+pub fn parse_leaf_cell(pointer: usize, page: &[u8]) -> Row {
     // lets say the pointer is 300
     // Cell structure: [payload_size][rowid][payload]
     let (_payload_size, payload_bytes_read) = parse_varint(&page[pointer..]);
@@ -137,80 +122,54 @@ pub fn parse_cell(pointer: usize, page: &[u8]) -> Row {
     }
 }
 
-// | 0 | NULL (0 bytes) |
-// | 1 | 8-bit integer (1 byte) |
-// | 2 | 16-bit integer (2 bytes) |
-// | 3 | 24-bit integer (3 bytes) |
-// | 4 | 32-bit integer (4 bytes) |
-// | 5 | 48-bit integer (6 bytes) |
-// | 6 | 64-bit integer (8 bytes) |
-// | 7 | float (8 bytes) |
-// | 8 | literal 0 (0 bytes) |
-// | 9 | literal 1 (0 bytes) |
-// | ≥12, even | BLOB, size = (code-12)/2 |
-// | ≥13, odd | TEXT, size = (code-13)/2 |
-fn parse_type_code(type_code: u64, page: &[u8]) -> (Value, usize) {
-    match type_code {
-        0 => (Value::Null, 0),
-        1 => (Value::Integer(page[0] as i8 as i64), 1),
-        2 => (
-            Value::Integer(i16::from_be_bytes([page[0], page[1]]) as i64),
-            2,
-        ),
-        3 => (
-            Value::Integer(i32::from_be_bytes([0, page[0], page[1], page[2]]) as i64),
-            3,
-        ),
-        4 => (
-            Value::Integer(i32::from_be_bytes([page[0], page[1], page[2], page[3]]) as i64),
-            4,
-        ),
-        5 => (
-            // TODO: need to handle sign extension. this code currently only supports positive
-            // integers
-            Value::Integer(i64::from_be_bytes([
-                0, 0, page[0], page[1], page[2], page[3], page[4], page[5],
-            ])),
-            6,
-        ),
-        6 => (
-            Value::Integer(i64::from_be_bytes([
-                page[0], page[1], page[2], page[3], page[4], page[5], page[6], page[7],
-            ])),
-            8,
-        ),
-        7 => (
-            Value::Float(f64::from_be_bytes([
-                page[0], page[1], page[2], page[3], page[4], page[5], page[6], page[7],
-            ])),
-            8,
-        ),
-        8 => (Value::Integer(0), 0),
-        9 => (Value::Integer(1), 0),
-        n if n >= 12 && n % 2 == 0 => {
-            let len = ((n - 12) / 2) as usize;
-            (Value::Blob(page[..len].to_vec()), len)
-        }
-        n if n >= 13 && n % 2 == 1 => {
-            let len = ((n - 13) / 2) as usize;
-            (
-                Value::Text(String::from_utf8_lossy(&page[..len]).to_string()),
-                len,
-            )
-        }
-        _ => panic!("Unknown type code: {}", type_code),
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn test_parse_interior_cell() {
+        // Build a fake page. Fill it with 0s (0u8)
+        let mut fake_page = vec![0u8; 1024];
+        // cell pointer is at index 12-13. anything before is the header.
+        // the pointer should be index 900 (which needs two bytes)
+        //
+        // the first byte is the most "significant", so we multiply it by 256
+        // the second byte is then added to this
+        // 0x03 == 3 and then times is by 256 = 768
+        // 0x84 == 132
+        // 768 + 132 == 900
+        fake_page[12] = 0x03;
+        fake_page[13] = 0x84;
+
+        // first four bytes contain the page number (3)
+        // note - since we offset by 100, the pointer 900 is referring to index 800 in our page buffer
+        fake_page[800] = 0x00;
+        fake_page[801] = 0x00;
+        fake_page[802] = 0x00;
+        fake_page[803] = 0x03;
+
+        // then a varint contains the rowid. these two bytes, when encoded with the
+        // varint algorithm, represent 300
+        fake_page[804] = 0x82;
+        fake_page[805] = 0x2C;
+
+        let target_cell = Cell {
+            child_page_number: 3,
+            rowid: 300,
+        };
+
+        // parse_cell expects the actual cell offset (800), not the pointer array index
+        let result = parse_interior_cell(800, &fake_page);
+
+        assert_eq!(result.child_page_number, target_cell.child_page_number);
+        assert_eq!(result.rowid, target_cell.rowid);
+    }
 
     // Cell structure: [payload_size][rowid][payload]
     // Payload structure: [header_size][type_codes...][values...]
 
     #[test]
-    fn test_parse_cell_i8() {
+    fn test_parse_leaf_cell_i8() {
         let mut fake_page = [0u8; 1024];
         fake_page[300..305].copy_from_slice(&[
             0x03, // payload_size = 3
@@ -220,13 +179,13 @@ mod test {
             0x02, // value = 2
         ]);
 
-        let result = parse_cell(300, &fake_page);
+        let result = parse_leaf_cell(300, &fake_page);
         assert_eq!(result._rowid, 1);
         assert_eq!(result.values, vec![Value::Integer(2)]);
     }
 
     #[test]
-    fn test_parse_cell_i16() {
+    fn test_parse_leaf_cell_i16() {
         let mut fake_page = [0u8; 1024];
         fake_page[300..306].copy_from_slice(&[
             0x04, // payload_size = 4
@@ -236,13 +195,13 @@ mod test {
             0x02, 0x02, // value = 514
         ]);
 
-        let result = parse_cell(300, &fake_page);
+        let result = parse_leaf_cell(300, &fake_page);
         assert_eq!(result._rowid, 1);
         assert_eq!(result.values, vec![Value::Integer(514)]);
     }
 
     #[test]
-    fn test_parse_cell_i24() {
+    fn test_parse_leaf_cell_i24() {
         let mut fake_page = [0u8; 1024];
         fake_page[300..307].copy_from_slice(&[
             0x05, // payload_size = 5
@@ -252,13 +211,13 @@ mod test {
             0x00, 0x02, 0x02, // value = 514
         ]);
 
-        let result = parse_cell(300, &fake_page);
+        let result = parse_leaf_cell(300, &fake_page);
         assert_eq!(result._rowid, 1);
         assert_eq!(result.values, vec![Value::Integer(514)]);
     }
 
     #[test]
-    fn test_parse_cell_i32() {
+    fn test_parse_leaf_cell_i32() {
         let mut fake_page = [0u8; 1024];
         fake_page[300..308].copy_from_slice(&[
             0x06, // payload_size = 6
@@ -268,13 +227,13 @@ mod test {
             0x00, 0x00, 0x02, 0x02, // value = 514
         ]);
 
-        let result = parse_cell(300, &fake_page);
+        let result = parse_leaf_cell(300, &fake_page);
         assert_eq!(result._rowid, 1);
         assert_eq!(result.values, vec![Value::Integer(514)]);
     }
 
     #[test]
-    fn test_parse_cell_i48() {
+    fn test_parse_leaf_cell_i48() {
         let mut fake_page = [0u8; 1024];
         fake_page[300..310].copy_from_slice(&[
             0x08, // payload_size = 8
@@ -284,13 +243,13 @@ mod test {
             0x00, 0x00, 0x00, 0x00, 0x02, 0x02, // value = 514
         ]);
 
-        let result = parse_cell(300, &fake_page);
+        let result = parse_leaf_cell(300, &fake_page);
         assert_eq!(result._rowid, 1);
         assert_eq!(result.values, vec![Value::Integer(514)]);
     }
 
     #[test]
-    fn test_parse_cell_i64() {
+    fn test_parse_leaf_cell_i64() {
         let mut fake_page = [0u8; 1024];
         fake_page[300..312].copy_from_slice(&[
             0x0A, // payload_size = 10
@@ -300,13 +259,13 @@ mod test {
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x02, // value = 514
         ]);
 
-        let result = parse_cell(300, &fake_page);
+        let result = parse_leaf_cell(300, &fake_page);
         assert_eq!(result._rowid, 1);
         assert_eq!(result.values, vec![Value::Integer(514)]);
     }
 
     #[test]
-    fn test_parse_cell_blob() {
+    fn test_parse_leaf_cell_blob() {
         let mut fake_page = [0u8; 1024];
         // payload = header(3) + blob(144) = 147 = 0x93
         fake_page[300..306].copy_from_slice(&[
@@ -318,13 +277,13 @@ mod test {
         // size of the value is (300-12)/2 = 144
         fake_page[306..450].fill(b'C');
 
-        let result = parse_cell(300, &fake_page);
+        let result = parse_leaf_cell(300, &fake_page);
         assert_eq!(result._rowid, 1);
         assert_eq!(result.values, vec![Value::Blob(vec![b'C'; 144])]);
     }
 
     #[test]
-    fn test_parse_cell_multiple_values() {
+    fn test_parse_leaf_cell_multiple_values() {
         let mut fake_page = [0u8; 1024];
         fake_page[300..308].copy_from_slice(&[
             0x06, // payload_size = 6
@@ -336,13 +295,13 @@ mod test {
             0x02, 0x02, // value = 514
         ]);
 
-        let result = parse_cell(300, &fake_page);
+        let result = parse_leaf_cell(300, &fake_page);
         assert_eq!(result._rowid, 1);
         assert_eq!(result.values, vec![Value::Integer(2), Value::Integer(514)]);
     }
 
     #[test]
-    fn test_parse_cell_null() {
+    fn test_parse_leaf_cell_null() {
         let mut fake_page = [0u8; 1024];
         fake_page[300..304].copy_from_slice(&[
             0x02, // payload_size = 2
@@ -351,13 +310,13 @@ mod test {
             0x00, // type_code = 0 (NULL)
         ]);
 
-        let result = parse_cell(300, &fake_page);
+        let result = parse_leaf_cell(300, &fake_page);
         assert_eq!(result._rowid, 1);
         assert_eq!(result.values, vec![Value::Null]);
     }
 
     #[test]
-    fn test_parse_cell_float() {
+    fn test_parse_leaf_cell_float() {
         let mut fake_page = [0u8; 1024];
         fake_page[300..304].copy_from_slice(&[
             0x0A, // payload_size = 10
@@ -367,13 +326,13 @@ mod test {
         ]);
         fake_page[304..312].copy_from_slice(&3.12_f64.to_be_bytes());
 
-        let result = parse_cell(300, &fake_page);
+        let result = parse_leaf_cell(300, &fake_page);
         assert_eq!(result._rowid, 1);
         assert_eq!(result.values, vec![Value::Float(3.12)]);
     }
 
     #[test]
-    fn test_parse_cell_literal_0() {
+    fn test_parse_leaf_cell_literal_0() {
         let mut fake_page = [0u8; 1024];
         fake_page[300..304].copy_from_slice(&[
             0x02, // payload_size = 2
@@ -382,13 +341,13 @@ mod test {
             0x08, // type_code = 8 (literal 0)
         ]);
 
-        let result = parse_cell(300, &fake_page);
+        let result = parse_leaf_cell(300, &fake_page);
         assert_eq!(result._rowid, 1);
         assert_eq!(result.values, vec![Value::Integer(0)]);
     }
 
     #[test]
-    fn test_parse_cell_literal_1() {
+    fn test_parse_leaf_cell_literal_1() {
         let mut fake_page = [0u8; 1024];
         fake_page[300..304].copy_from_slice(&[
             0x02, // payload_size = 2
@@ -397,13 +356,13 @@ mod test {
             0x09, // type_code = 9 (literal 1)
         ]);
 
-        let result = parse_cell(300, &fake_page);
+        let result = parse_leaf_cell(300, &fake_page);
         assert_eq!(result._rowid, 1);
         assert_eq!(result.values, vec![Value::Integer(1)]);
     }
 
     #[test]
-    fn test_parse_cell_text() {
+    fn test_parse_leaf_cell_text() {
         let mut fake_page = [0u8; 1024];
         fake_page[300..304].copy_from_slice(&[
             0x07, // payload_size = 7
@@ -413,7 +372,7 @@ mod test {
         ]);
         fake_page[304..309].copy_from_slice(b"Alice");
 
-        let result = parse_cell(300, &fake_page);
+        let result = parse_leaf_cell(300, &fake_page);
         assert_eq!(result._rowid, 1);
         assert_eq!(result.values, vec![Value::Text("Alice".to_string())]);
     }

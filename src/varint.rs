@@ -1,5 +1,3 @@
-use std::{fs::File, io::Read};
-
 // An example of how value 300 is decoded, encoded as [0x82, 0x2C]
 //
 // hex characters are 4 bits each.
@@ -85,46 +83,10 @@ pub fn parse_varint(bytes: &[u8]) -> (u64, usize) {
     (value, bytes_read)
 }
 
-// for now, all we care about is page_size
-pub struct Header {
-    pub page_size: u16,
-}
-
-// offset 0-16 = magic string "SQLite format 3/000"
-// offfset 16-18 = page size in bytes
-pub fn parse_header(file: &mut File) -> Header {
-    let mut header = [0u8; 100];
-
-    // &mut means "give read_exact temporary permission to mutate header without
-    // becoming the owner". Once read_exact is done with it, the header gets back ownership.
-    //
-    // - header — pass ownership (you can't use it after)
-    // - &header — immutable borrow (you still own it, they can only read)
-    // - &mut header — mutable borrow (you still own it, they can read/write)
-    //
-    // read_exact mutates header in place so there's no need to reassign it
-    match file.read_exact(&mut header) {
-        Ok(buffer) => buffer,
-        Err(e) => panic!("{}", e),
-    }
-
-    let page_size = u16::from_be_bytes([header[16], header[17]]);
-
-    Header { page_size }
-}
-
-// this is just an arbitrary module to group tests in the file. not needed.
-#[cfg(test)] // this tells rust to only compile the following code when running tests
+#[cfg(test)]
 mod tests {
-    use std::fs::File;
-
-    // super refers to the parent module (this file). * means everything.
-    // so this line makes every function / struct etc defined in this file available within
-    // the tests module.
     use super::*;
 
-    // #[test] is an attribute that the compiler understands. attributes are typically
-    // used to mark something for the compiler or other tools.
     #[test]
     fn test_parse_varint() {
         let result = parse_varint(&[0x82, 0x2C]);
@@ -142,15 +104,5 @@ mod tests {
         // 16384 = 0x4000, encoded as [0x81, 0x80, 0x00]
         let result = parse_varint(&[0x81, 0x80, 0x00]);
         assert_eq!(result, (16384, 3));
-    }
-
-    #[test]
-    // test that parse_header returns a Header with a page size
-    fn test_parse_header() {
-        let mut file = File::open("chinook.db").unwrap();
-
-        let result = parse_header(&mut file);
-
-        assert_eq!(result.page_size, 1024)
     }
 }

@@ -74,4 +74,14 @@ impl Page {
 
         u16::from_be_bytes([self.data[pointer_index], self.data[pointer_index + 1]]) as usize
     }
+
+    pub fn rightmost_child(&self) -> u32 {
+        let offset = self.offset + 8;
+        u32::from_be_bytes([
+            self.data[offset],
+            self.data[offset + 1],
+            self.data[offset + 2],
+            self.data[offset + 3],
+        ])
+    }
 }
