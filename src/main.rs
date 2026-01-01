@@ -1,11 +1,17 @@
 use std::fs::File;
 
-use crate::page::Page;
+use crate::{leaf::Row, page::Page};
 
 mod database;
 mod interior;
 mod leaf;
 mod page;
+
+#[derive(Debug)]
+struct Table {
+    name: String,
+    rootpage: i64,
+}
 
 // read from chinook.db
 // the first 100 bytes are reserved for the header
@@ -18,33 +24,43 @@ fn main() {
 
     let header = database::parse_header(&mut file);
 
-    println!("Page size: {}", header.page_size);
+    let mut sqlite_master_rows: Vec<Row> = vec![];
 
-    traverse(&mut file, 1, header.page_size);
+    // read sqlite_master table
+    traverse(&mut file, 1, header.page_size, &mut sqlite_master_rows);
+
+    let mut tables: Vec<Table> = vec![];
+    // save the table name and references
+    for row in &sqlite_master_rows {
+        if row.values[0].as_text().unwrap() == "table" {
+            tables.push(Table {
+                name: String::from(row.values[1].as_text().unwrap()),
+                rootpage: row.values[3].as_integer().unwrap(),
+            })
+        }
+    }
+
+    for table in &tables {
+        println!("{:?}", table);
+    }
 }
 
 // follow the cell references in interior pages and fetch values from
 // linked leaf pages
-fn traverse(file: &mut File, page_num: u32, page_size: u16) {
+fn traverse(file: &mut File, page_num: u32, page_size: u16, records: &mut Vec<Row>) {
     let page = Page::read(file, page_num, page_size);
 
     if page.is_leaf() {
         for i in 0..page.num_cells {
-            let cell = leaf::parse_cell(page.cell_pointer(i), &page.data);
+            let row = leaf::parse_cell(page.cell_pointer(i), &page.data);
 
-            // this is only relevant to the sqlite_master table on page 1
-            if cell.values[0].as_text() == Some("table") {
-                println!(
-                    "name: {:?}, root_page: {:?}",
-                    cell.values[1].as_text().unwrap(),
-                    cell.values[3].as_integer().unwrap()
-                );
-            }
+            records.push(row);
         }
     } else {
         for i in 0..page.num_cells {
             let cell = interior::parse_cell(page.cell_pointer(i), &page.data);
-            traverse(file, cell.child_page_number, page_size);
+
+            traverse(file, cell.child_page_number, page_size, records);
         }
 
         let mut offset = 0;
@@ -59,6 +75,6 @@ fn traverse(file: &mut File, page_num: u32, page_size: u16) {
             page.data[offset + 10],
             page.data[offset + 11],
         ]);
-        traverse(file, rightmost, page_size);
+        traverse(file, rightmost, page_size, records);
     }
 }

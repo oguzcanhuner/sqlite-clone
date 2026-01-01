@@ -75,15 +75,16 @@ impl Value {
             _ => None,
         }
     }
-    pub fn as_integer(&self) -> Option<&i64> {
+    pub fn as_integer(&self) -> Option<i64> {
         match self {
-            Value::Integer(i) => Some(i),
+            Value::Integer(i) => Some(*i),
             _ => None,
         }
     }
 }
 
-pub struct Cell {
+#[derive(Debug)]
+pub struct Row {
     pub _rowid: u64,
     pub values: Vec<Value>,
 }
@@ -92,7 +93,7 @@ pub struct Cell {
 // The header also contains number_of_cells
 // Each index is a 2-byte pointer, so you need to fetch the two bytes and cast them
 // together using big-endian.
-pub fn parse_cell(pointer: usize, page: &[u8]) -> Cell {
+pub fn parse_cell(pointer: usize, page: &[u8]) -> Row {
     // lets say the pointer is 300
     // Cell structure: [payload_size][rowid][payload]
     let (_payload_size, payload_bytes_read) = parse_varint(&page[pointer..]);
@@ -130,7 +131,7 @@ pub fn parse_cell(pointer: usize, page: &[u8]) -> Cell {
         values_offset += size;
     }
 
-    Cell {
+    Row {
         _rowid: rowid,
         values,
     }

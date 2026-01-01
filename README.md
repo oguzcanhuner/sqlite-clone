@@ -12,7 +12,7 @@ A minimal SQLite implementation for learning purposes.
 - [x] Parse leaf page cells
 - [x] Decode varints
 - [x] Decode record format (column types + values)
-- [ ] Read `sqlite_master` to find tables
+- [x] Read `sqlite_master` to find tables
 - [ ] Traverse table b-trees to read rows
 - [ ] Parse basic SQL (`SELECT * FROM table`)
 - [ ] Filter rows (`WHERE` clause)
