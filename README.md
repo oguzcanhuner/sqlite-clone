@@ -13,8 +13,9 @@ A minimal SQLite implementation for learning purposes.
 - [x] Decode varints
 - [x] Decode record format (column types + values)
 - [x] Read `sqlite_master` to find tables
-- [ ] Traverse table b-trees to read rows
-- [ ] Parse basic SQL (`SELECT * FROM table`)
+- [x] Traverse table b-trees to read rows
+- [x] Parse basic SQL (`SELECT * FROM table`)
+- [ ] Parse table column names
 - [ ] Filter rows (`WHERE` clause)
 - [ ] Parse indexes
 - [ ] Use indexes for faster lookups

@@ -1,11 +1,13 @@
 use std::fs::File;
 
-use crate::schema::parse_tables;
+use crate::{db::Db, query::execute, schema::parse_tables};
 
 mod btree;
 mod cell;
+mod db;
 mod header;
 mod page;
+mod query;
 mod schema;
 mod value;
 mod varint;
@@ -16,9 +18,23 @@ fn main() {
         Err(e) => panic!("Failed to open file: {}", e),
     };
 
-    let tables = parse_tables(&mut file);
+    let header = header::parse_header(&mut file);
 
-    for table in &tables {
-        println!("{:?}", table);
+    let tables = parse_tables(&mut file, header.page_size);
+
+    println!("Tables: {:?}", tables);
+
+    let mut db = Db {
+        file,
+        page_size: header.page_size,
+        tables,
+    };
+
+    let rows = execute(&mut db, String::from("SELECT * FROM albums"));
+
+    for row in &rows {
+        println!("{:?}", row)
     }
+    // execute(&mut db, String::from("SELECT * FROM artists"));
+    // execute(&mut db, String::from("SELECT * FROM customers"));
 }
