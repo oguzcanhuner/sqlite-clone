@@ -1,5 +1,5 @@
+use crate::value::{Value, parse_type_code};
 use crate::varint::parse_varint;
-use crate::value::{parse_type_code, Value};
 
 pub struct Cell {
     pub child_page_number: u32,
@@ -68,9 +68,9 @@ pub fn parse_interior_cell(index: usize, page: &[u8]) -> Cell {
 //   0x05            → column 1 value: 5
 //   "Alice"         → column 2 value: Alice
 
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 pub struct Row {
-    pub _rowid: u64,
+    pub rowid: u64,
     pub values: Vec<Value>,
 }
 
@@ -116,10 +116,7 @@ pub fn parse_leaf_cell(pointer: usize, page: &[u8]) -> Row {
         values_offset += size;
     }
 
-    Row {
-        _rowid: rowid,
-        values,
-    }
+    Row { rowid, values }
 }
 
 #[cfg(test)]
@@ -180,7 +177,7 @@ mod test {
         ]);
 
         let result = parse_leaf_cell(300, &fake_page);
-        assert_eq!(result._rowid, 1);
+        assert_eq!(result.rowid, 1);
         assert_eq!(result.values, vec![Value::Integer(2)]);
     }
 
@@ -196,7 +193,7 @@ mod test {
         ]);
 
         let result = parse_leaf_cell(300, &fake_page);
-        assert_eq!(result._rowid, 1);
+        assert_eq!(result.rowid, 1);
         assert_eq!(result.values, vec![Value::Integer(514)]);
     }
 
@@ -212,7 +209,7 @@ mod test {
         ]);
 
         let result = parse_leaf_cell(300, &fake_page);
-        assert_eq!(result._rowid, 1);
+        assert_eq!(result.rowid, 1);
         assert_eq!(result.values, vec![Value::Integer(514)]);
     }
 
@@ -228,7 +225,7 @@ mod test {
         ]);
 
         let result = parse_leaf_cell(300, &fake_page);
-        assert_eq!(result._rowid, 1);
+        assert_eq!(result.rowid, 1);
         assert_eq!(result.values, vec![Value::Integer(514)]);
     }
 
@@ -244,7 +241,7 @@ mod test {
         ]);
 
         let result = parse_leaf_cell(300, &fake_page);
-        assert_eq!(result._rowid, 1);
+        assert_eq!(result.rowid, 1);
         assert_eq!(result.values, vec![Value::Integer(514)]);
     }
 
@@ -260,7 +257,7 @@ mod test {
         ]);
 
         let result = parse_leaf_cell(300, &fake_page);
-        assert_eq!(result._rowid, 1);
+        assert_eq!(result.rowid, 1);
         assert_eq!(result.values, vec![Value::Integer(514)]);
     }
 
@@ -278,7 +275,7 @@ mod test {
         fake_page[306..450].fill(b'C');
 
         let result = parse_leaf_cell(300, &fake_page);
-        assert_eq!(result._rowid, 1);
+        assert_eq!(result.rowid, 1);
         assert_eq!(result.values, vec![Value::Blob(vec![b'C'; 144])]);
     }
 
@@ -296,7 +293,7 @@ mod test {
         ]);
 
         let result = parse_leaf_cell(300, &fake_page);
-        assert_eq!(result._rowid, 1);
+        assert_eq!(result.rowid, 1);
         assert_eq!(result.values, vec![Value::Integer(2), Value::Integer(514)]);
     }
 
@@ -311,7 +308,7 @@ mod test {
         ]);
 
         let result = parse_leaf_cell(300, &fake_page);
-        assert_eq!(result._rowid, 1);
+        assert_eq!(result.rowid, 1);
         assert_eq!(result.values, vec![Value::Null]);
     }
 
@@ -327,7 +324,7 @@ mod test {
         fake_page[304..312].copy_from_slice(&3.12_f64.to_be_bytes());
 
         let result = parse_leaf_cell(300, &fake_page);
-        assert_eq!(result._rowid, 1);
+        assert_eq!(result.rowid, 1);
         assert_eq!(result.values, vec![Value::Float(3.12)]);
     }
 
@@ -342,7 +339,7 @@ mod test {
         ]);
 
         let result = parse_leaf_cell(300, &fake_page);
-        assert_eq!(result._rowid, 1);
+        assert_eq!(result.rowid, 1);
         assert_eq!(result.values, vec![Value::Integer(0)]);
     }
 
@@ -357,7 +354,7 @@ mod test {
         ]);
 
         let result = parse_leaf_cell(300, &fake_page);
-        assert_eq!(result._rowid, 1);
+        assert_eq!(result.rowid, 1);
         assert_eq!(result.values, vec![Value::Integer(1)]);
     }
 
@@ -373,7 +370,7 @@ mod test {
         fake_page[304..309].copy_from_slice(b"Alice");
 
         let result = parse_leaf_cell(300, &fake_page);
-        assert_eq!(result._rowid, 1);
+        assert_eq!(result.rowid, 1);
         assert_eq!(result.values, vec![Value::Text("Alice".to_string())]);
     }
 }

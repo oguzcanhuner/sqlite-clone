@@ -38,7 +38,7 @@ mod tests {
     #[test]
     // test that parse_header returns a Header with a page size
     fn test_parse_header() {
-        let mut file = File::open("chinook.db").unwrap();
+        let mut file = File::open("tests/chinook.db").unwrap();
 
         let result = parse_header(&mut file);
 
