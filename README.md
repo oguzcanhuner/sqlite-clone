@@ -16,7 +16,7 @@ A minimal SQLite implementation for learning purposes.
 - [x] Traverse table b-trees to read rows
 - [x] Parse basic SQL (`SELECT * FROM table`)
 - [x] Write a simple CLI interface
-- [ ] Parse table column names
+- [x] Parse table column names
 - [ ] Filter rows (`WHERE` clause)
 - [ ] Parse indexes
 - [ ] Use indexes for faster lookups

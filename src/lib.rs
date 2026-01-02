@@ -15,15 +15,14 @@ mod varint;
 pub use cell::Row;
 pub use value::Value;
 
-pub fn run(file_path: &String, query: &String) -> Vec<Row> {
-    println!("file_path: {}, query: {}", file_path, query);
+pub fn run(file_path: &String, query: &String) -> (Vec<String>, Vec<Row>) {
     let mut file = File::open(file_path).expect("Failed to open file: {}");
 
     let header = header::parse_header(&mut file);
 
     let tables = parse_tables(&mut file, header.page_size);
 
-    println!("Tables: {:?}", tables);
+    // println!("Tables: {:?}", tables);
 
     let mut db = Db {
         file,

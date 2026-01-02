@@ -6,7 +6,7 @@ fn test_select_all_albums() {
     let file_path = String::from("tests/chinook.db");
     let query = String::from("SELECT * FROM albums");
 
-    let rows = run(&file_path, &query);
+    let (column_names, rows) = run(&file_path, &query);
 
     println!("{:?}", rows.first().unwrap());
 
@@ -19,6 +19,13 @@ fn test_select_all_albums() {
         ],
     };
 
+    let target_column_names: Vec<String> = vec![
+        String::from("[AlbumId]"),
+        String::from("[Title]"),
+        String::from("[ArtistId]"),
+    ];
+
+    assert_eq!(target_column_names, column_names);
     assert_eq!(rows.first().unwrap(), &target_row);
-    assert_eq!(rows.len(), 347 as usize);
+    assert_eq!(rows.len(), 347);
 }

@@ -27,20 +27,18 @@ fn main() {
         .get(2)
         .expect("Usage: sqlite_oz query database_file_path");
 
-    let rows = run(file_path, query);
+    let (column_names, rows) = run(file_path, query);
 
-    let mut table = Table::new();
+    let mut output_table = Table::new();
 
-    // TODO get the actual headers from schema. This should probably live in the run function.
-    let headers = vec!["Unknown"; rows[0].values.len() + 1];
+    output_table.set_header(column_names);
 
-    table.set_header(&headers);
     for row in &rows {
         let mut values = vec![format!("{:?}", row.rowid)];
-        values.extend(row.values.iter().map(|v| format!("{:?}", v)));
+        values.extend(row.values.iter().skip(1).map(|v| format!("{:?}", v)));
 
-        table.add_row(values);
+        output_table.add_row(values);
     }
 
-    println!("{}", table);
+    println!("{}", output_table);
 }
